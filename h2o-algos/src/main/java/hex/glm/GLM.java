@@ -49,6 +49,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
   protected boolean _cv; // flag signalling this is MB for one of the fold-models during cross-validation
   static NumberFormat lambdaFormatter = new DecimalFormat(".##E0");
   static NumberFormat devFormatter = new DecimalFormat(".##");
+  double eps = 1e-20; // smallest number to replace zero and prevent divide by zero.
 
   public static final int SCORING_INTERVAL_MSEC = 15000; // scoreAndUpdateModel every minute unless score every iteration is set
   public String _generatedWeights = null;
@@ -400,7 +401,8 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
           if (!_response.isInt())
             warn("_family", "Poisson and Negative Binomial expect non-negative integer response," +
                     " got floats.");
-          if (_parms._family.equals(Family.negbinomial) && (_parms._theta <= 0 || _parms._theta>1))
+          if (_parms._family.equals(Family.negbinomial) && ((_parms._theta_iteration_step ==0) && 
+                  (_parms._theta <= 0 || _parms._theta>1)))
             error("_family", "Illegal Negative Binomial theta value.  Valid theta values be > 0" +
                     " and <= 1.");
           break;
@@ -494,8 +496,16 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
           _state._ymu = MemoryManager.malloc8d(_nclass);
           for (int i = 0; i < _state._ymu.length; ++i)
             _state._ymu[i] = _priorClassDist[i];
-        } else
-          _state._ymu = new double[]{_parms._intercept?_train.lastVec().mean():_parms.linkInv(0)};
+        } else {
+          _state._ymu = new double[]{_parms._intercept ? _train.lastVec().mean() : _parms.linkInv(0)};
+          if (_parms._family.equals(Family.negbinomial) && (_parms._theta_iteration_step>0)) {
+            double rmean = _train.lastVec().mean();
+            rmean = rmean>0?rmean:eps;
+            double rstd = _train.lastVec().sigma();
+            double temp = (rstd*rstd-rmean)/(rmean*rmean);
+            _parms._theta = temp>0?temp:eps;
+          }
+        }
       }
       BetaConstraint bc = (_parms._beta_constraints != null)?new BetaConstraint(_parms._beta_constraints.get()):new BetaConstraint();
       if((bc.hasBounds() || bc.hasProximalPenalty()) && _parms._compute_p_values)
@@ -809,7 +819,6 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     }
 
     private void fitIRLSM(Solver s) {
-      GLMWeightsFun glmw = new GLMWeightsFun(_parms);
       double [] betaCnd = _state.beta();
       LineSearchSolver ls = null;
       boolean firstIter = true;
@@ -847,12 +856,20 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
             Log.info(LogMsg("computed in " + (t2 - t1) + "+" + (t3 - t2) + "+" + (t4 - t3) + "=" + (t4 - t1) + "ms, step = " + ls.step() + ((_lslvr != null) ? ", l1solver " + _lslvr : "")));
           } else
             Log.info(LogMsg("computed in " + (t2 - t1) + "+" + (t3 - t2) + "=" + (t3 - t1) + "ms, step = " + 1 + ((_lslvr != null) ? ", l1solver " + _lslvr : "")));
+        // calculate the estimated response using the latest coefficients and estimate the new theta here.
+          if (_parms._family.equals(Family.negbinomial) && _parms._theta_iteration_step>0 && iterCnt % _parms._theta_iteration_step==0) {
+            updateThetas(betaCnd);
+          }
         }
       } catch(NonSPDMatrixException e) {
         Log.warn(LogMsg("Got Non SPD matrix, stopped."));
       }
     }
-
+    
+    public void updateThetas(double[] coeffs) {
+      
+    }
+    
     private void fitLBFGS() {
       double [] beta = _state.beta();
       final double l1pen = _state.l1pen();
@@ -1253,7 +1270,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
         if (_parms._family == Family.ordinal)
           _dinfo.addResponse(new String[]{"__glm_ExpC", "__glm_ExpNPC"}, vecs); // store eta for class C and class C-1
         else
-          _dinfo.addResponse(new String[]{"__glm_sumExp", "__glm_maxRow"}, vecs);
+          _dinfo.addResponse(new String[]{"__glm_sumExp", "__glm_maxRow"}, vecs); // will borrow one column to store estimated response for negbinomial
       }
       double oldDevTrain = _nullDevTrain;
       double oldDevTest = _nullDevTest;

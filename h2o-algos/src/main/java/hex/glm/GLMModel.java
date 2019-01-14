@@ -184,7 +184,7 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
     public double _tweedie_variance_power;
     public double _tweedie_link_power;
     public double _theta; // 1/k and is used by negative binomial distribution only
-    public boolean _optimize_theta=true; // true to optimize theta, false to leave it alone
+    public int _theta_iteration_step = 0; // when to optimize theta, 0 means no optimization
     public double [] _alpha = null;
     public double [] _lambda = null;
     public MissingValuesHandling _missing_values_handling = MissingValuesHandling.MeanImputation;
@@ -245,6 +245,7 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
       }
       if(_family != Family.negbinomial) {
         glm.hide("_theta","Only applicable with Negative Binomial family");
+        glm.hide("_optimize_theta", "Only applicable with Negative Binomial family");
       }
       if(_remove_collinear_columns && !_intercept)
         glm.error("_intercept","Remove colinear columns option is currently not supported without intercept");
@@ -545,19 +546,21 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
     final double _link_power;
     double _theta;  // used by negative binomial, 0 < _theta <= 1
     double _invTheta;
+    int _theta_iteration_multiplier;
     //final boolean _optimizetheta;
     final NormalDistribution _dprobit = new NormalDistribution(0,1);  // get the normal distribution
     
     public GLMWeightsFun(GLMParameters parms) {this(parms._family,parms._link, parms._tweedie_variance_power, 
-            parms._tweedie_link_power, parms._theta);}
+            parms._tweedie_link_power, parms._theta, parms._theta_iteration_step);}
 
-    public GLMWeightsFun(Family fam, Link link, double var_power, double link_power, double theta) {
+    public GLMWeightsFun(Family fam, Link link, double var_power, double link_power, double theta, int optimizeT) {
       _family = fam;
       _link = link;
       _var_power = var_power;
       _link_power = link_power;
       _theta = theta;
       _invTheta = 1/theta;
+      _theta_iteration_multiplier= optimizeT;
     }
 
     public final double link(double x) {

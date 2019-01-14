@@ -37,8 +37,8 @@ class H2OGeneralizedLinearEstimator(H2OEstimator):
                       "keep_cross_validation_models", "keep_cross_validation_predictions",
                       "keep_cross_validation_fold_assignment", "fold_assignment", "fold_column", "response_column",
                       "ignored_columns", "ignore_const_cols", "score_each_iteration", "offset_column", "weights_column",
-                      "family", "tweedie_variance_power", "tweedie_link_power", "theta", "optimize_theta", "solver",
-                      "alpha", "lambda_", "lambda_search", "early_stopping", "nlambdas", "standardize",
+                      "family", "tweedie_variance_power", "tweedie_link_power", "theta", "theta_iteration_step",
+                      "solver", "alpha", "lambda_", "lambda_search", "early_stopping", "nlambdas", "standardize",
                       "missing_values_handling", "compute_p_values", "remove_collinear_columns", "intercept",
                       "non_negative", "max_iterations", "objective_epsilon", "beta_epsilon", "gradient_epsilon", "link",
                       "prior", "lambda_min_ratio", "beta_constraints", "max_active_predictors", "interactions",
@@ -348,18 +348,18 @@ class H2OGeneralizedLinearEstimator(H2OEstimator):
 
 
     @property
-    def optimize_theta(self):
+    def theta_iteration_step(self):
         """
-        Optimize theta
+        Theta iteration step
 
-        Type: ``bool``  (default: ``True``).
+        Type: ``int``  (default: ``0``).
         """
-        return self._parms.get("optimize_theta")
+        return self._parms.get("theta_iteration_step")
 
-    @optimize_theta.setter
-    def optimize_theta(self, optimize_theta):
-        assert_is_type(optimize_theta, None, bool)
-        self._parms["optimize_theta"] = optimize_theta
+    @theta_iteration_step.setter
+    def theta_iteration_step(self, theta_iteration_step):
+        assert_is_type(theta_iteration_step, None, int)
+        self._parms["theta_iteration_step"] = theta_iteration_step
 
 
     @property

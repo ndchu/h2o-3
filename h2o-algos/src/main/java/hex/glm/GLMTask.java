@@ -1565,6 +1565,7 @@ public abstract class GLMTask  {
     @Override public boolean handlesSparseData(){return true;}
 
     transient private double _sparseOffset;
+
     @Override
     public void chunkInit() {
       // initialize
