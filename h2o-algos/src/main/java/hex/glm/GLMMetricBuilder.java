@@ -188,6 +188,8 @@ public class GLMMetricBuilder extends MetricBuilderSupervised<GLMMetricBuilder> 
       case multinomial:
         _aic = Double.NaN;
         break;
+      case negbinomial:
+        _aic = -2*(-_rank);  // todo: fix me
       default:
         assert false : "missing implementation for family " + _glmf._family;
     }

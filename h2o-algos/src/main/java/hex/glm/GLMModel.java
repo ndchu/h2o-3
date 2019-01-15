@@ -184,7 +184,8 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
     public double _tweedie_variance_power;
     public double _tweedie_link_power;
     public double _theta; // 1/k and is used by negative binomial distribution only
-    public int _theta_iteration_step = 0; // when to optimize theta, 0 means no optimization
+    public double _invTheta;
+    public boolean _optimize_theta = false; // when to optimize theta, false means no optimization
     public double [] _alpha = null;
     public double [] _lambda = null;
     public MissingValuesHandling _missing_values_handling = MissingValuesHandling.MeanImputation;
@@ -353,6 +354,7 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
       _family = f;
       _link = l;
       this._theta=theta;
+      this._invTheta = 1.0/theta;
     }
 
     public final double variance(double mu){
@@ -404,6 +406,10 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
         case poisson:
           if( yr == 0 ) return 2 * ym;
           return 2 * ((yr * Math.log(yr / ym)) - (yr - ym));
+        case negbinomial:
+          ym = ym>0?ym:1e-12;
+          return (_link.equals(Link.log)?(2*(_invTheta*Math.log(yr/ym)+(yr+_invTheta)*Math.log((yr+_invTheta)/(yr+_invTheta)))):
+                  (2*(_invTheta*Math.log(yr/ym)+(yr+_invTheta)*Math.log((ym+_invTheta)/(yr+_invTheta)))));          
         case gamma:
           if( yr == 0 ) return -2;
           return -2 * (Math.log(yr / ym) - (yr - ym) / ym);
@@ -546,21 +552,21 @@ public class GLMModel extends Model<GLMModel,GLMModel.GLMParameters,GLMModel.GLM
     final double _link_power;
     double _theta;  // used by negative binomial, 0 < _theta <= 1
     double _invTheta;
-    int _theta_iteration_multiplier;
+    final boolean _optimize_theta;
     //final boolean _optimizetheta;
     final NormalDistribution _dprobit = new NormalDistribution(0,1);  // get the normal distribution
     
     public GLMWeightsFun(GLMParameters parms) {this(parms._family,parms._link, parms._tweedie_variance_power, 
-            parms._tweedie_link_power, parms._theta, parms._theta_iteration_step);}
+            parms._tweedie_link_power, parms._theta, parms._optimize_theta);}
 
-    public GLMWeightsFun(Family fam, Link link, double var_power, double link_power, double theta, int optimizeT) {
+    public GLMWeightsFun(Family fam, Link link, double var_power, double link_power, double theta, boolean optimizeT) {
       _family = fam;
       _link = link;
       _var_power = var_power;
       _link_power = link_power;
       _theta = theta;
       _invTheta = 1/theta;
-      _theta_iteration_multiplier= optimizeT;
+      _optimize_theta = optimizeT;
     }
 
     public final double link(double x) {

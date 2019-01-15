@@ -401,8 +401,8 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
           if (!_response.isInt())
             warn("_family", "Poisson and Negative Binomial expect non-negative integer response," +
                     " got floats.");
-          if (_parms._family.equals(Family.negbinomial) && ((_parms._theta_iteration_step ==0) && 
-                  (_parms._theta <= 0 || _parms._theta>1)))
+          if (_parms._family.equals(Family.negbinomial) && !_parms._optimize_theta && 
+                  (_parms._theta <= 0 || _parms._theta>1))
             error("_family", "Illegal Negative Binomial theta value.  Valid theta values be > 0" +
                     " and <= 1.");
           break;
@@ -498,7 +498,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
             _state._ymu[i] = _priorClassDist[i];
         } else {
           _state._ymu = new double[]{_parms._intercept ? _train.lastVec().mean() : _parms.linkInv(0)};
-          if (_parms._family.equals(Family.negbinomial) && (_parms._theta_iteration_step>0)) {
+          if (_parms._family.equals(Family.negbinomial) && _parms._optimize_theta) {
             double rmean = _train.lastVec().mean();
             rmean = rmean>0?rmean:eps;
             double rstd = _train.lastVec().sigma();
@@ -819,10 +819,12 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     }
 
     private void fitIRLSM(Solver s) {
+      GLMWeightsFun glmw = new GLMWeightsFun(_parms);
       double [] betaCnd = _state.beta();
       LineSearchSolver ls = null;
       boolean firstIter = true;
       int iterCnt = 0;
+      double current_theta = _parms._theta;
       try {
         while (true) {
           iterCnt++;
@@ -850,24 +852,35 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
               return;
             }
             betaCnd = ls.getX();
-            if(!progress(betaCnd,ls.ginfo()))
-              return;
+            if(!progress(betaCnd,ls.ginfo())) { // break out, no more progress here possible
+              // calculate the estimated response using the latest coefficients and estimate the new theta here.
+              if (_parms._family.equals(Family.negbinomial) && _parms._optimize_theta && !timeout() && !_job.stop_requested() && (_state._iter < _parms._max_iterations)) {
+                updateThetas(betaCnd, glmw);
+                if (Math.abs(current_theta-_parms._theta) < _parms._beta_epsilon) { // theta stops changing too.
+                  return;
+                } 
+                current_theta = _parms._theta;
+              } else // done, go home
+                return;
+            }
             long t4 = System.currentTimeMillis();
             Log.info(LogMsg("computed in " + (t2 - t1) + "+" + (t3 - t2) + "+" + (t4 - t3) + "=" + (t4 - t1) + "ms, step = " + ls.step() + ((_lslvr != null) ? ", l1solver " + _lslvr : "")));
           } else
             Log.info(LogMsg("computed in " + (t2 - t1) + "+" + (t3 - t2) + "=" + (t3 - t1) + "ms, step = " + 1 + ((_lslvr != null) ? ", l1solver " + _lslvr : "")));
-        // calculate the estimated response using the latest coefficients and estimate the new theta here.
-          if (_parms._family.equals(Family.negbinomial) && _parms._theta_iteration_step>0 && iterCnt % _parms._theta_iteration_step==0) {
-            updateThetas(betaCnd);
-          }
         }
       } catch(NonSPDMatrixException e) {
         Log.warn(LogMsg("Got Non SPD matrix, stopped."));
       }
     }
     
-    public void updateThetas(double[] coeffs) {
-      
+    public void updateThetas(double[] coeffs, GLMWeightsFun glmw ) {
+      GLMTask.GLMNegbinomialResppdate gt = new GLMTask.GLMNegbinomialResppdate(_state.activeData(), _job._key, coeffs, glmw).doAll(_state.activeData()._adaptedFrame);
+      double respMean = _state.activeData()._adaptedFrame.vec(10).mean();
+      respMean = respMean==0?eps:respMean;
+      double temp =  _state.activeData()._adaptedFrame.vec(10).sigma();
+      double respVar = temp*temp;
+      double theta = (respVar-respMean)/(respMean*respMean);
+      _parms._theta = theta<=0?eps:theta;
     }
     
     private void fitLBFGS() {

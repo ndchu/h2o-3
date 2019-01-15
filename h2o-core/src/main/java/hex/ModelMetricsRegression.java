@@ -97,6 +97,7 @@ public class ModelMetricsRegression extends ModelMetricsSupervised {
     Distribution _dist;
     double _abserror;
     double _rmslerror;
+    double _sumLLH;
     public MetricBuilderRegression() {
       super(1,null); //this will make _work = new float[2];
     }
@@ -118,11 +119,14 @@ public class ModelMetricsRegression extends ModelMetricsSupervised {
       _abserror += w*Math.abs(err);
       _rmslerror += w*err_msle;
       assert !Double.isNaN(_sumsqe);
-      if (m != null && m._parms._distribution != DistributionFamily.huber)
+      if (m != null && m._parms._distribution != DistributionFamily.huber) {
         _sumdeviance += m.deviance(w, yact[0], ds[0]);
-      else if (_dist!=null)
+        if (m.getClass().getName().equals("hex.glm.GLMModel"))
+          _sumLLH += m.likelihood(w, yact[0], ds[0]);
+      } else if (_dist!=null)
         _sumdeviance += _dist.deviance(w, yact[0], ds[0]);
-      _count++;
+
+      _count++;   
       _wcount += w;
       _wY += w*yact[0];
       _wYY += w*yact[0]*yact[0];

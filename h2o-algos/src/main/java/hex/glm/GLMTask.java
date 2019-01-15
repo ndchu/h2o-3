@@ -1524,6 +1524,44 @@ public abstract class GLMTask  {
     }
   }
 
+  public static class GLMNegbinomialResppdate extends FrameTask2< GLMNegbinomialResppdate> {
+    private final double [] _beta; // updated  value of beta
+    private final GLMWeightsFun _glmf;
+
+    private transient GLMWeights _w;
+    transient private double _sparseOffset;
+    private transient Chunk _updatedResps;
+    
+    public  GLMNegbinomialResppdate(DataInfo dinfo, Key jobKey, double [] beta, GLMWeightsFun glmw) {
+      super(null, dinfo, jobKey);
+      _beta = beta;
+      _glmf = glmw;
+
+    }
+
+    @Override public void chunkInit(){
+      // initialize
+      if(_sparse)
+        _sparseOffset = GLM.sparseOffset(_beta,_dinfo);
+      _w = new GLMWeights();
+    }
+
+
+    @Override public void map(Chunk [] chks) {
+      _updatedResps = chks[chks.length-2];
+      super.map(chks);
+    }
+
+    @Override
+    protected void processRow(Row r) {
+      if(r.isBad() || r.weight == 0) return;
+      double y = r.response(0);
+      final int numStart = _dinfo.numStart();
+      _glmf.computeWeights(y, r.innerProduct(_beta) + _sparseOffset, r.offset, r.weight, _w);
+      _updatedResps.set(r.cid, _w.mu);
+    }
+  } 
+
   /**
    * One iteration of glm, computes weighted gram matrix and t(x)*y vector and t(y)*y scalar.
    *
@@ -1542,7 +1580,7 @@ public abstract class GLMTask  {
     long _nobs;
     public double _likelihood;
     private transient GLMWeights _w;
-//    final double _lambda;
+    //    final double _lambda;
     double wsum, wsumu;
     double _sumsqe;
     int _c = -1;
@@ -1572,7 +1610,7 @@ public abstract class GLMTask  {
       _gram = new Gram(_dinfo.fullN(), _dinfo.largestCat(), _dinfo.numNums(), _dinfo._cats,true);
       _xy = MemoryManager.malloc8d(_dinfo.fullN()+1); // + 1 is for intercept
       if(_sparse)
-         _sparseOffset = GLM.sparseOffset(_beta,_dinfo);
+        _sparseOffset = GLM.sparseOffset(_beta,_dinfo);
       _w = new GLMWeights();
     }
 
