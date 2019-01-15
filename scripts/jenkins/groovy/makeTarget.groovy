@@ -1,8 +1,7 @@
 def call(final pipelineContext, final Closure body) {
   final List<String> FILES_TO_EXCLUDE = [
-          '**/rest.log', 
-          '**/*prediction*.csv', 
-          '**/java*_*.out.txt'
+          '**/rest.log',
+          '**/*prediction*.csv',
   ]
 
   final List<String> FILES_TO_ARCHIVE_ON_FAILURE = [
@@ -12,6 +11,9 @@ def call(final pipelineContext, final Closure body) {
           '**/results/failed/*.txt',
           '**/results/*.code',
           '**/results/failed/*.code',
+          '**/results/failed/*.code',
+          '**/java*_*.out.txt.zip',
+          '**/java*_*.out.txt',
   ]
 
   final List<String> FILES_TO_ARCHIVE_ON_SUCCESS = [
@@ -86,6 +88,9 @@ def call(final pipelineContext, final Closure body) {
       pipelineContext.getUtils().archiveJUnitResults(this, config.h2o3dir)
     }
     if (config.archiveFiles) {
+      execMake("""
+make -f ${config.makefilePath} compress-huge-logfiles
+""")
       pipelineContext.getUtils().archiveStageFiles(this,
               config.h2o3dir,
               success ? FILES_TO_ARCHIVE_ON_SUCCESS : FILES_TO_ARCHIVE_ON_FAILURE,
